@@ -116,7 +116,8 @@ def configure_raw_teacher(policy, observation_spec):
     actor = ProbabilisticActor(
         module=Seq(
             CatTensors(list(input_keys), "_actor_inp", del_keys=False, sort=False),
-            Mod(make_mlp([512, 256, 256]), ["_actor_inp"], ["_actor_feature"]),
+            Mod(make_mlp(list(getattr(policy.cfg, "actor_hidden_dims", (512, 256, 256)))),
+                ["_actor_inp"], ["_actor_feature"]),
             Mod(Actor(policy.action_dim, init_noise_scale=policy.cfg.init_noise_scale,
                       load_noise_scale=policy.cfg.load_noise_scale),
                 ["_actor_feature"], IndependentNormal.dist_keys),

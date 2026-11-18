@@ -91,6 +91,14 @@ This command alone runs the tuned WM recipe. Its defaults:
 | `algo.replay_capacity` | 524288 |
 | `algo.actor_microbatch_size` | 1024 |
 | `algo.wm_loss_scales.object_root_velocity` | 1.0 (board twist weighted 6.25x the robot's) |
+| `algo.wm_hidden_dims` | [1024,1024,1024] |
+| `algo.actor_hidden_dims`, `algo.critic_hidden_dims` | [512,256,256], [512,256,128] (the PPO teacher's) |
+
+SuperMimic's widths are `'algo.wm_hidden_dims=[2048,2048,2048]'
+'algo.actor_hidden_dims=[2048,1024,512,256]' 'algo.critic_hidden_dims=[256,128]'`.
+With a 2048-wide WM, `algo.actor_microbatch_size=1024` ran out of GPU memory
+around iteration 10, so lower it (e.g. 512). A checkpoint loads only with its
+own widths, and the loader error names the flag to pass.
 
 `algo.task_defaults` holds the WM training-only task settings. `scripts/train.py`
 merges them into `task` before the environment is built:

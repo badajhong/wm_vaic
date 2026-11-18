@@ -423,7 +423,9 @@ class PPOVEL(TensorDictModuleBase):
         self.actor_adapt = build_actor(in_keys, self.dist_cls, self.dist_keys)
 
         # build critic
-        _critic = nn.Sequential(make_mlp([512, 256, 128]), nn.LazyLinear(num_reward_groups))
+        # WM exposes algo.critic_hidden_dims; PPO configs keep the original widths.
+        critic_widths = list(getattr(cfg, "critic_hidden_dims", (512, 256, 128)))
+        _critic = nn.Sequential(make_mlp(critic_widths), nn.LazyLinear(num_reward_groups))
         self.critic = Seq(
             CatTensors(critic_in_keys, "_critic_input", del_keys=False),
             Mod(_critic, ["_critic_input"], ["state_value"])

@@ -174,6 +174,8 @@ def test_wm_default_uses_root_object_and_fresh_data_budget_without_cli_overrides
     assert wm.algo.critic_num_minibatches == 8
     # Preserve model/teacher hidden widths and the total actor start pool.
     assert tuple(wm.algo.wm_hidden_dims) == (1024, 1024, 1024)
+    assert tuple(wm.algo.actor_hidden_dims) == (512, 256, 256)
+    assert tuple(wm.algo.critic_hidden_dims) == (512, 256, 128)
     assert wm.algo.wm_batch_size == 1024
     assert wm.algo.wm_sequence_length == 8
     assert wm.algo.actor_batch_size == 4096
@@ -336,3 +338,13 @@ def test_ppo_has_no_training_task_defaults_and_missing_terms_are_never_added():
     cfg, (applied, skipped) = _train_defaults(["++algo.task_defaults.termination.not_a_term.min_steps=1"])
     assert skipped == ["termination.not_a_term.min_steps"]
     assert "not_a_term" not in cfg.task.termination
+
+
+def test_supermimic_network_widths_compose_from_the_command_line():
+    with initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
+        cfg = compose(config_name="train", overrides=[
+            "algo=wm_train", f"task={TASK}", "algo.wm_hidden_dims=[2048,2048,2048]",
+            "algo.actor_hidden_dims=[2048,1024,512,256]", "algo.critic_hidden_dims=[256,128]"])
+    assert list(cfg.algo.wm_hidden_dims) == [2048, 2048, 2048]
+    assert list(cfg.algo.actor_hidden_dims) == [2048, 1024, 512, 256]
+    assert list(cfg.algo.critic_hidden_dims) == [256, 128]

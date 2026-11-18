@@ -44,6 +44,10 @@ class WMConfig(PPOConfig):
         "command": {"reset_sampling": "return"},
     })
     wm_hidden_dims: List[int] = (1024, 1024, 1024)
+    # Teacher actor MLP and critic MLP hidden widths (defaults: the PPO teacher's).
+    # SuperMimic uses actor (2048, 1024, 512, 256) and critic (256, 128).
+    actor_hidden_dims: List[int] = (512, 256, 256)
+    critic_hidden_dims: List[int] = (512, 256, 128)
     wm_lr: float = 2e-4
     wm_updates: int = 48  # Fixed-mode model updates per iteration (epoch mode: 3x16).
     wm_batch_size: int = 1024
@@ -199,6 +203,13 @@ def _trunk_widths(world_model_state):
     return tuple(width for _, width in sorted(widths))
 
 
+def _hidden_widths(module_state):
+    """Output widths of a module's linear layers, excluding its output head."""
+    widths = [int(value.shape[0]) for key, value in module_state.items()
+              if key.endswith(".weight") and getattr(value, "ndim", 0) == 2]
+    return tuple(widths[:-1])
+
+
 def validation_reward_groups(world_model, count):
     """Per reward group: (modeled, contact_free) flags for validation metrics.
 
@@ -310,6 +321,11 @@ class WM(PPOVEL):
             raise ValueError("validation_max_contact_event_miss_rate must be between zero and one")
         if cfg.train_dr_estimator:
             raise ValueError("wm_train is teacher-only; train_dr_estimator must be false")
+        for key in ("wm_hidden_dims", "actor_hidden_dims", "critic_hidden_dims"):
+            widths = getattr(cfg, key)
+            if not len(widths) or any(isinstance(width, bool) or int(width) != width or width < 1
+                                      for width in widths):
+                raise ValueError(f"{key} must be a non-empty list of positive integers")
         if cfg.actor_optimizer not in ("adam", "kl"):
             raise ValueError("actor_optimizer must be 'adam' (SuperMimic fixed rate) or legacy 'kl'")
         if cfg.wm_frame not in ("world", "heading"):
@@ -1393,6 +1409,13 @@ class WM(PPOVEL):
             widths = ",".join(str(width) for width in saved_widths)
             raise ValueError(f"This WM checkpoint has dynamics hidden widths {list(saved_widths)}, but this run "
                              f"uses {list(target_widths)}; pass 'algo.wm_hidden_dims=[{widths}]' to load it")
+        for name, flag in (("actor", "actor_hidden_dims"), ("critic", "critic_hidden_dims")):
+            saved = _hidden_widths(state_dict.get(name, {}))
+            current = _hidden_widths(getattr(self, name).state_dict())
+            if saved and current and saved != current:
+                widths = ",".join(str(width) for width in saved)
+                raise ValueError(f"This checkpoint has {name} hidden widths {list(saved)}, but this run uses "
+                                 f"{list(current)}; pass 'algo.{flag}=[{widths}]' to load it")
         target_physics = getattr(self.world_model, "physics", None)
         migrated_world_model = None
         migration_info = None

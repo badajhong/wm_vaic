@@ -922,3 +922,29 @@ def test_dynamics_width_mismatch_names_the_hidden_dims_flag():
     restored.world_model.physics.trunk = torch.nn.Sequential(torch.nn.Linear(7, 2048))
     with pytest.raises(ValueError, match=r"pass 'algo.wm_hidden_dims=\[1024,1024,512\]' to load it"):
         restored.load_state_dict(checkpoint, strict=True)
+
+
+def test_actor_and_critic_hidden_widths_are_configurable_and_checked_on_load():
+    from active_adaptation.learning.wm.algorithm import _hidden_widths
+    default = make_policy()
+    # Defaults keep the PPO teacher widths.
+    assert _hidden_widths(default.actor.state_dict()) == (512, 256, 256)
+    assert _hidden_widths(default.critic.state_dict()) == (512, 256, 128)
+    small = make_policy(actor_hidden_dims=(64, 32), critic_hidden_dims=(16,))
+    assert _hidden_widths(small.actor.state_dict()) == (64, 32)
+    assert _hidden_widths(small.critic.state_dict()) == (16,)
+    # Optimizers own the rebuilt modules' parameters.
+    assert {id(p) for group in small.opt_policy.param_groups for p in group["params"]} >= {
+        id(p) for p in small.actor.parameters()}
+    assert {id(p) for group in small.opt_critic.param_groups for p in group["params"]} == {
+        id(p) for p in small.critic.parameters()}
+    info = small.train_op(make_rollout(small))
+    assert all(math.isfinite(value) for value in info.values())
+    with pytest.raises(ValueError, match=r"'algo\.actor_hidden_dims=\[512,256,256\]'"):
+        small.load_state_dict(default.state_dict())
+    critic_only = make_policy(critic_hidden_dims=(16,))
+    with pytest.raises(ValueError, match=r"'algo\.critic_hidden_dims=\[512,256,128\]'"):
+        critic_only.load_state_dict(default.state_dict())
+    for bad in ((), (0,), (1.5,)):
+        with pytest.raises(ValueError, match="actor_hidden_dims"):
+            make_policy(actor_hidden_dims=bad)
